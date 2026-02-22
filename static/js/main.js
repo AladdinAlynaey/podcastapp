@@ -40,21 +40,21 @@ function setupEventListeners() {
   uploadArea.addEventListener('dragover', handleDragOver);
   uploadArea.addEventListener('dragleave', handleDragLeave);
   uploadArea.addEventListener('drop', handleFileDrop);
-  
+
   // Chat events
   questionInput.addEventListener('keypress', handleQuestionInputKeypress);
   document.getElementById('chat-submit').addEventListener('click', askQuestion);
-  
+
   // Tab events
   tabButtons.forEach(button => {
     button.addEventListener('click', () => switchTab(button.dataset.tab));
   });
-  
+
   // Podcast events
   generatePodcastBtn.addEventListener('click', generatePodcast);
   downloadAudioBtn.addEventListener('click', downloadAudio);
   scriptToggle.addEventListener('click', toggleScriptVisibility);
-  
+
   // Audio player events
   podcastAudio.addEventListener('timeupdate', updateAudioProgress);
   podcastAudio.addEventListener('loadedmetadata', initializeAudioPlayer);
@@ -91,12 +91,12 @@ Try uploading a PDF, Word, or text file to begin!`;
 async function fetchFiles() {
   try {
     showLoading(fileList);
-    
+
     const response = await fetch('/files');
     const data = await response.json();
-    
+
     hideLoading(fileList);
-    
+
     if (data.files && data.files.length > 0) {
       renderFiles(data.files);
     } else {
@@ -111,19 +111,19 @@ async function fetchFiles() {
 
 function renderFiles(files) {
   fileList.innerHTML = '';
-  
+
   files.forEach(file => {
     const fileItem = document.createElement('div');
     fileItem.className = 'file-item';
-    
+
     if (selectedFile === file.filename) {
       fileItem.classList.add('file-item-selected');
     }
-    
+
     // Determine file type icon based on extension
     const fileExtension = file.filename.split('.').pop().toLowerCase();
     let fileIconClass = 'fa-file'; // Default icon
-    
+
     // Map file extensions to specific icons
     switch (fileExtension) {
       case 'pdf':
@@ -177,26 +177,26 @@ function renderFiles(files) {
       default:
         fileIconClass = 'fa-file-alt';
     }
-    
+
     // Format file size if available
     let fileSizeDisplay = '';
     if (file.size) {
       fileSizeDisplay = formatFileSize(file.size);
     }
-    
+
     // Format upload date if available
     let uploadDateDisplay = '';
     if (file.uploaded_at) {
       uploadDateDisplay = formatDate(new Date(file.uploaded_at));
     }
-    
+
     fileItem.innerHTML = `
       <div class="d-flex align-center">
         <i class="fas ${fileIconClass} file-icon"></i>
         <div class="file-info">
           <span class="file-name">${file.filename}</span>
-          ${fileSizeDisplay || uploadDateDisplay ? 
-            `<div class="file-meta">
+          ${fileSizeDisplay || uploadDateDisplay ?
+        `<div class="file-meta">
               ${fileSizeDisplay ? `<span class="file-size"><i class="fas fa-hdd"></i> ${fileSizeDisplay}</span>` : ''}
               ${uploadDateDisplay ? `<span class="file-date"><i class="fas fa-calendar-alt"></i> ${uploadDateDisplay}</span>` : ''}
             </div>` : ''}
@@ -212,14 +212,14 @@ function renderFiles(files) {
         </button>
       </div>
     `;
-    
+
     fileList.appendChild(fileItem);
-    
+
     // Add event listeners
     fileItem.querySelector('.select-file-btn').addEventListener('click', () => {
       selectFile(file.filename);
     });
-    
+
     fileItem.querySelector('.delete-file-btn').addEventListener('click', () => {
       deleteFile(file.filename);
     });
@@ -239,7 +239,7 @@ function selectFile(filename) {
   selectedFileName.textContent = filename;
   noFileSelected.classList.add('hidden');
   fileActions.classList.remove('hidden');
-  
+
   // Update file list UI
   document.querySelectorAll('.file-item').forEach(item => {
     item.classList.remove('file-item-selected');
@@ -247,15 +247,15 @@ function selectFile(filename) {
       item.classList.add('file-item-selected');
     }
   });
-  
+
   // Reset chat with welcome message
   chatContainer.innerHTML = '';
   conversationHistory = [];
-  
+
   // Add welcome message
   const welcomeMessage = `Hello! I'm your document assistant. Ask me any questions about "${filename}". I'll answer based only on the content of the document.`;
   appendBotMessage(welcomeMessage, true);
-  
+
   // Reset podcast UI
   podcastResult.classList.add('hidden');
 }
@@ -264,10 +264,10 @@ async function deleteFile(filename) {
   if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
     return;
   }
-  
+
   try {
     showLoading(fileList);
-    
+
     const response = await fetch('/delete-file', {
       method: 'POST',
       headers: {
@@ -275,9 +275,9 @@ async function deleteFile(filename) {
       },
       body: JSON.stringify({ filename })
     });
-    
+
     const data = await response.json();
-    
+
     if (data.success) {
       // If the deleted file was selected, reset UI
       if (selectedFile === filename) {
@@ -285,7 +285,7 @@ async function deleteFile(filename) {
         noFileSelected.classList.remove('hidden');
         fileActions.classList.add('hidden');
       }
-      
+
       // Refresh file list
       fetchFiles();
     } else {
@@ -302,28 +302,28 @@ async function handleFileUpload() {
   if (!fileInput.files || fileInput.files.length === 0) {
     return;
   }
-  
+
   const file = fileInput.files[0];
-  
+
   // Reset file input
   fileInput.value = '';
-  
+
   // Validate file
   if (!validateFile(file)) {
     return;
   }
-  
+
   // Create FormData object
   const formData = new FormData();
   formData.append('file', file);
-  
+
   // Show progress bar
   uploadProgress.classList.remove('hidden');
   progressBar.style.width = '0%';
-  
+
   try {
     const xhr = new XMLHttpRequest();
-    
+
     // Setup progress event
     xhr.upload.addEventListener('progress', (event) => {
       if (event.lengthComputable) {
@@ -332,37 +332,43 @@ async function handleFileUpload() {
         progressBar.setAttribute('aria-valuenow', percentComplete);
       }
     });
-    
+
     // Setup load event
     xhr.addEventListener('load', () => {
       if (xhr.status === 200) {
         const response = JSON.parse(xhr.responseText);
-        
+
         if (response.success) {
           showToast('success', 'File uploaded successfully!');
           fetchFiles();
-          selectFile(file.name);
+          // Use the server-returned filename (UUID-based for non-ASCII names)
+          selectFile(response.filename || file.name);
         } else {
           showToast('error', `Error: ${response.error || 'Failed to upload file'}`);
         }
       } else {
-        showToast('error', 'Error uploading file. Please try again.');
+        try {
+          const errorResponse = JSON.parse(xhr.responseText);
+          showToast('error', errorResponse.error || 'Error uploading file. Please try again.');
+        } catch (e) {
+          showToast('error', 'Error uploading file. Please try again.');
+        }
       }
-      
+
       // Hide progress bar
       uploadProgress.classList.add('hidden');
     });
-    
+
     // Setup error event
     xhr.addEventListener('error', () => {
       showToast('error', 'Error uploading file. Please try again.');
       uploadProgress.classList.add('hidden');
     });
-    
+
     // Send request
     xhr.open('POST', '/upload', true);
     xhr.send(formData);
-    
+
   } catch (error) {
     uploadProgress.classList.add('hidden');
     showToast('error', 'Error uploading file. Please try again.');
@@ -371,12 +377,14 @@ async function handleFileUpload() {
 }
 
 function validateFile(file) {
-  // Check file size (max 10MB)
-  if (file.size > 10 * 1024 * 1024) {
-    showToast('error', 'File size exceeds 10MB. Please choose a smaller file.');
+  // Check file size (max 0.5 MB = 512 KB)
+  const MAX_SIZE = 0.5 * 1024 * 1024; // 512 KB
+  if (file.size > MAX_SIZE) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    showToast('error', `File is too large (${sizeMB} MB). Maximum allowed size is 0.5 MB.`);
     return false;
   }
-  
+
   // Check file type
   const acceptedTypes = [
     'application/pdf',
@@ -384,12 +392,12 @@ function validateFile(file) {
     'application/msword',
     'text/plain'
   ];
-  
+
   if (!acceptedTypes.includes(file.type)) {
     showToast('error', 'Unsupported file type. Please upload PDF, DOCX, DOC, or TXT files.');
     return false;
   }
-  
+
   return true;
 }
 
@@ -405,7 +413,7 @@ function handleDragLeave() {
 function handleFileDrop(e) {
   e.preventDefault();
   uploadArea.classList.remove('upload-area-active');
-  
+
   if (e.dataTransfer.files.length > 0) {
     fileInput.files = e.dataTransfer.files;
     handleFileUpload();
@@ -425,21 +433,21 @@ async function askQuestion() {
     showToast('warning', 'Please select a document first.');
     return;
   }
-  
+
   const question = questionInput.value.trim();
   if (!question) return;
-  
+
   // Clear input
   questionInput.value = '';
   questionInput.disabled = true;
   document.getElementById('chat-submit').disabled = true;
-  
+
   // Display user message
   appendUserMessage(question);
-  
+
   // Show typing indicator
   showTypingIndicator();
-  
+
   try {
     // Send question to API
     const response = await fetch('/ask', {
@@ -451,32 +459,32 @@ async function askQuestion() {
         conversation_history: conversationHistory
       })
     });
-    
+
     // Hide the typing indicator
     hideTypingIndicator();
-    
+
     if (!response.ok) {
       const errorData = await response.json();
       appendBotMessage(`Sorry, there was an error: ${errorData.error || 'Unknown error'}`);
       return;
     }
-    
+
     const data = await response.json();
-    
+
     // Process the response to enhance markdown formatting
     let formattedAnswer = data.answer || "I'm sorry, I couldn't generate an answer.";
-    
+
     // Ensure code blocks are properly formatted
     formattedAnswer = formattedAnswer.replace(/```([\s\S]*?)```/g, (match, p1) => {
       if (!p1.includes('\n')) {
         // This is an inline code block
         return '`' + p1 + '`';
       }
-      
+
       // Check if language is specified
       const firstLine = p1.trim().split('\n')[0];
       const restContent = p1.trim().split('\n').slice(1).join('\n');
-      
+
       if (firstLine && !firstLine.includes(' ') && firstLine.length < 20) {
         // Language specified, keep it
         return '```' + firstLine + '\n' + restContent + '\n```';
@@ -485,13 +493,13 @@ async function askQuestion() {
         return '```text\n' + p1 + '\n```';
       }
     });
-    
+
     // Ensure proper list formatting with spacing
     formattedAnswer = formattedAnswer.replace(/(\n[*-]\s.*\n)(?=[*-]\s)/g, '$1\n');
-    
+
     // Add proper spacing before headings
     formattedAnswer = formattedAnswer.replace(/(\n)#{1,6}\s/g, '\n\n$&');
-    
+
     // Add bot response to chat
     appendBotMessage(formattedAnswer, true);
   } catch (error) {
@@ -512,7 +520,7 @@ function scrollChatToBottom() {
   setTimeout(() => {
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }, 50);
-  
+
   // Also try using scrollIntoView on the last message for better reliability
   const lastMessage = chatContainer.lastElementChild;
   if (lastMessage) {
@@ -522,7 +530,7 @@ function scrollChatToBottom() {
 
 function appendUserMessage(text) {
   const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  
+
   const messageElement = document.createElement('div');
   messageElement.className = 'chat-message user';
   messageElement.innerHTML = `
@@ -532,27 +540,27 @@ function appendUserMessage(text) {
     </div>
     <div class="message-avatar">U</div>
   `;
-  
+
   chatContainer.appendChild(messageElement);
   scrollChatToBottom();
-  
+
   // Add to conversation history
   conversationHistory.push({ role: 'user', content: text });
 }
 
 function appendBotMessage(text, useMarkdown = false) {
   const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  
+
   // Process markdown if enabled
   const processedText = useMarkdown ? marked.parse(text) : text;
-  
+
   // Sanitize HTML to prevent XSS
   const sanitizedText = DOMPurify.sanitize(processedText);
-  
+
   // Create message element
   const messageElement = document.createElement('div');
   messageElement.className = 'chat-message bot';
-  
+
   messageElement.innerHTML = `
     <div class="message-avatar bot-avatar">AI</div>
     <div class="message-bubble">
@@ -560,27 +568,27 @@ function appendBotMessage(text, useMarkdown = false) {
       <div class="message-timestamp">${timestamp}</div>
     </div>
   `;
-  
+
   // Add to chat container
   chatContainer.appendChild(messageElement);
-  
+
   // Scroll to the bottom
   scrollChatToBottom();
-  
+
   // Get content element to type into
   const contentElement = messageElement.querySelector('.message-content');
-  
+
   // Add to conversation history
   conversationHistory.push({ role: 'assistant', content: text });
-  
+
   // Start typing effect with improved natural feel
   if (useMarkdown) {
     // Set the content first but make it invisible
     contentElement.innerHTML = sanitizedText;
-    
+
     // Apply typewriter effect
     typeWriter(contentElement, sanitizedText);
-    
+
     // Force remove the class after a maximum time to ensure the cursor disappears
     setTimeout(() => {
       contentElement.classList.remove('typing-animation');
@@ -588,13 +596,13 @@ function appendBotMessage(text, useMarkdown = false) {
   } else {
     // For plain text, still use typewriter for consistency
     typeWriter(contentElement, sanitizedText);
-    
+
     // Force remove the class after a maximum time to ensure the cursor disappears
     setTimeout(() => {
       contentElement.classList.remove('typing-animation');
     }, 5000);
   }
-  
+
   // Ensure scrolling works after typing is complete
   setTimeout(() => {
     scrollChatToBottom();
@@ -606,49 +614,49 @@ function typeWriter(element, html) {
   // Create a temporary container for the HTML
   const temp = document.createElement('div');
   temp.innerHTML = html;
-  
+
   // Set empty content
   element.innerHTML = '';
   element.appendChild(temp);
-  
+
   // Get all text nodes
   const allTextNodes = getAllTextNodes(temp);
   let visibleChars = 0;
   let totalChars = 0;
-  
+
   // Count total characters for progress calculation
   allTextNodes.forEach(node => {
     totalChars += node.length;
   });
-  
+
   // Hide all text initially
   hideAllText(temp);
-  
+
   // Natural typing variation settings
   let typingSpeed = 20; // Base typing speed (ms) - made faster
   let nextCharDelay = 0;
-  
+
   // Set a maximum typing time regardless of content length
   const maxTypingTime = 10000; // 10 seconds max
   const startTime = Date.now();
-  
+
   // Start revealing characters with natural timing variations
   let typeInterval = setInterval(typeNextChars, typingSpeed);
-  
+
   function typeNextChars() {
     // Check if max typing time has elapsed
     if (Date.now() - startTime > maxTypingTime) {
       // Force completion
       clearInterval(typeInterval);
       showAllText(temp);
-      
+
       // Make sure to remove the animation class
       element.classList.remove('typing-animation');
-      
+
       chatContainer.scrollTop = chatContainer.scrollHeight;
       return;
     }
-    
+
     // Add natural variation to typing speed
     if (Math.random() < 0.05) { // Reduced probability for pauses
       // Occasional pause (thinking)
@@ -661,31 +669,31 @@ function typeWriter(element, html) {
       nextCharDelay = 0;
       visibleChars += 3 + Math.floor(Math.random() * 5); // Show more characters at once
     }
-    
+
     // Reveal characters up to the current count
     revealChars(temp, visibleChars);
-    
+
     // Scroll to bottom as text appears
     chatContainer.scrollTop = chatContainer.scrollHeight;
-    
+
     // Stop when all text is visible
     if (visibleChars >= totalChars) {
       clearInterval(typeInterval);
-      
+
       // Make sure all text is visible 
       showAllText(temp);
-      
+
       // Ensure the animation class is removed
       element.classList.remove('typing-animation');
-      
+
       // Final scroll to ensure content is visible
       setTimeout(() => {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }, 100);
-      
+
       return;
     }
-    
+
     // Apply dynamic typing speed
     if (nextCharDelay > 0) {
       clearInterval(typeInterval);
@@ -700,21 +708,21 @@ function typeWriter(element, html) {
 function getAllTextNodes(node) {
   const textNodes = [];
   const walker = document.createTreeWalker(
-    node, 
-    NodeFilter.SHOW_TEXT, 
+    node,
+    NodeFilter.SHOW_TEXT,
     { acceptNode: (node) => node.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT }
   );
-  
+
   while (walker.nextNode()) {
     textNodes.push(walker.currentNode.textContent);
   }
-  
+
   return textNodes;
 }
 
 function hideAllText(node) {
   const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-  
+
   while (walker.nextNode()) {
     const textNode = walker.currentNode;
     const span = document.createElement('span');
@@ -734,18 +742,18 @@ function showAllText(node) {
 
 function revealChars(node, count) {
   let charCount = 0;
-  
+
   // Find all spans with hidden text
   const hiddenSpans = node.querySelectorAll('span[style*="visibility: hidden"]');
-  
+
   for (const span of hiddenSpans) {
     const text = span.textContent;
-    
+
     // If we've already shown all characters in this function call
     if (charCount >= count) {
       break;
     }
-    
+
     // If we'll show some or all of this span's characters
     if (charCount + text.length <= count) {
       // Show the entire span
@@ -755,19 +763,19 @@ function revealChars(node, count) {
       // Show part of this span
       const visiblePart = text.substring(0, count - charCount);
       const hiddenPart = text.substring(count - charCount);
-      
+
       // Replace the span with two spans - one visible, one hidden
       const visibleSpan = document.createElement('span');
       visibleSpan.textContent = visiblePart;
-      
+
       const hiddenSpan = document.createElement('span');
       hiddenSpan.style.visibility = 'hidden';
       hiddenSpan.textContent = hiddenPart;
-      
+
       span.parentNode.insertBefore(visibleSpan, span);
       span.parentNode.insertBefore(hiddenSpan, span);
       span.parentNode.removeChild(span);
-      
+
       charCount = count; // We've now shown exactly 'count' characters
       break;
     }
@@ -776,9 +784,9 @@ function revealChars(node, count) {
 
 function showTypingIndicator() {
   if (isTyping) return;
-  
+
   isTyping = true;
-  
+
   const typingElement = document.createElement('div');
   typingElement.className = 'chat-message bot typing-message';
   typingElement.innerHTML = `
@@ -789,18 +797,18 @@ function showTypingIndicator() {
       <span></span>
     </div>
   `;
-  
+
   chatContainer.appendChild(typingElement);
   scrollChatToBottom();
 }
 
 function hideTypingIndicator() {
   const typingElement = document.querySelector('.typing-message');
-  
+
   if (typingElement) {
     typingElement.remove();
   }
-  
+
   isTyping = false;
 }
 
@@ -810,15 +818,15 @@ async function generatePodcast() {
     showToast('warning', 'Please select a document first.');
     return;
   }
-  
+
   // Get options
   const numSpeakers = numSpeakersSelect.value;
   const language = languageSelect.value;
-  
+
   // Disable button and show loading state
   generatePodcastBtn.disabled = true;
   generatePodcastBtn.innerHTML = '<div class="loading"></div> Generating...';
-  
+
   try {
     const response = await fetch('/generate-podcast', {
       method: 'POST',
@@ -831,28 +839,28 @@ async function generatePodcast() {
         language
       })
     });
-    
+
     const data = await response.json();
-    
+
     if (data.error) {
       showToast('error', `Error: ${data.error}`);
     }
-    
+
     if (data.podcast_script) {
       // Show result
       podcastResult.classList.remove('hidden');
-      
+
       // Set script content (use display_script if available, otherwise use podcast_script)
       const displayScript = data.display_script || data.podcast_script;
       podcastScript.innerHTML = DOMPurify.sanitize(marked.parse(displayScript));
-      
+
       // Set audio source
       if (data.audio_path) {
         currentAudioPath = data.audio_path;
         podcastAudio.src = `${data.audio_path}?t=${Date.now()}`;
         podcastAudio.load();
       }
-      
+
       // Show podcast section
       scrollToElement(podcastResult);
     } else {
@@ -879,7 +887,7 @@ function downloadAudio() {
 
 function toggleScriptVisibility() {
   scriptVisible = !scriptVisible;
-  
+
   if (scriptVisible) {
     scriptContent.style.maxHeight = scriptContent.scrollHeight + 'px';
     scriptToggle.innerHTML = '<i class="fas fa-chevron-up"></i>';
@@ -901,7 +909,7 @@ function updateAudioProgress() {
   const currentTime = podcastAudio.currentTime;
   const duration = podcastAudio.duration || 1;
   const progressPercent = (currentTime / duration) * 100;
-  
+
   document.querySelector('.audio-progress-bar').style.width = `${progressPercent}%`;
   document.querySelector('.time-current').textContent = formatTime(currentTime);
 }
@@ -922,7 +930,7 @@ function switchTab(tabId) {
       button.classList.remove('active');
     }
   });
-  
+
   // Show active tab content
   tabContents.forEach(content => {
     if (content.id === tabId) {
@@ -954,24 +962,24 @@ function scrollToElement(element) {
 function showToast(type, message) {
   // Create toast container if it doesn't exist
   let toastContainer = document.getElementById('toast-container');
-  
+
   if (!toastContainer) {
     toastContainer = document.createElement('div');
     toastContainer.id = 'toast-container';
     toastContainer.className = 'toast-container';
     document.body.appendChild(toastContainer);
   }
-  
+
   // Create toast
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  
+
   // Set icon based on type
   let icon = 'info-circle';
   if (type === 'success') icon = 'check-circle';
   if (type === 'error') icon = 'exclamation-circle';
   if (type === 'warning') icon = 'exclamation-triangle';
-  
+
   toast.innerHTML = `
     <div class="toast-icon">
       <i class="fas fa-${icon}"></i>
@@ -981,10 +989,10 @@ function showToast(type, message) {
       <i class="fas fa-times"></i>
     </button>
   `;
-  
+
   // Add to container
   toastContainer.appendChild(toast);
-  
+
   // Add event listener to close button
   toast.querySelector('.toast-close').addEventListener('click', () => {
     toast.classList.add('toast-hiding');
@@ -992,7 +1000,7 @@ function showToast(type, message) {
       toast.remove();
     }, 300);
   });
-  
+
   // Auto-remove after 5 seconds
   setTimeout(() => {
     if (toast.parentNode) {
@@ -1004,7 +1012,7 @@ function showToast(type, message) {
       }, 300);
     }
   }, 5000);
-  
+
   // Animate in
   setTimeout(() => {
     toast.classList.add('toast-visible');
@@ -1120,11 +1128,11 @@ document.head.appendChild(toastStyles);
 // Helper function to format file size
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 Bytes';
-  
+
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 

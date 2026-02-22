@@ -170,6 +170,86 @@ def save_wav(filename, pcm_data, channels=1, rate=24000, sample_width=2):
         wf.writeframes(pcm_data)
 
 
+def combine_wav_segments(wav_files, output_path, silence_ms=500):
+    """
+    Combine multiple WAV files into one, with silence gaps between segments.
+    Uses Python's wave module only (no ffmpeg or pydub needed).
+    All WAV files must have the same sample format.
+    """
+    if not wav_files:
+        return False
+
+    try:
+        # Read first file to get audio params
+        with wave.open(wav_files[0], 'rb') as first:
+            params = first.getparams()
+            channels = params.nchannels
+            sampwidth = params.sampwidth
+            framerate = params.framerate
+
+        # Build silence bytes for the gap
+        silence_frames = int(framerate * silence_ms / 1000)
+        silence_bytes = b'\x00' * (silence_frames * channels * sampwidth)
+
+        # Combine all audio data
+        combined_data = bytearray()
+        for i, wav_file in enumerate(wav_files):
+            try:
+                with wave.open(wav_file, 'rb') as wf:
+                    # If format differs, try to read anyway
+                    frames = wf.readframes(wf.getnframes())
+                    combined_data.extend(frames)
+                    # Add silence gap between segments (not after last)
+                    if i < len(wav_files) - 1:
+                        combined_data.extend(silence_bytes)
+            except Exception as e:
+                logger.warning(f"Skipping segment {wav_file}: {e}")
+                continue
+
+        if not combined_data:
+            return False
+
+        # Write combined WAV
+        with wave.open(output_path, 'wb') as out:
+            out.setnchannels(channels)
+            out.setsampwidth(sampwidth)
+            out.setframerate(framerate)
+            out.writeframes(bytes(combined_data))
+
+        logger.info(f"Combined {len(wav_files)} WAV segments into {output_path}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to combine WAV segments: {e}")
+        return False
+
+
+def combine_mp3_segments(mp3_files, output_path):
+    """
+    Combine multiple MP3 files by simple binary concatenation.
+    This works because MP3 is a frame-based format.
+    """
+    if not mp3_files:
+        return False
+
+    try:
+        with open(output_path, 'wb') as out:
+            for mp3_file in mp3_files:
+                try:
+                    with open(mp3_file, 'rb') as f:
+                        out.write(f.read())
+                except Exception as e:
+                    logger.warning(f"Skipping MP3 segment {mp3_file}: {e}")
+                    continue
+
+        logger.info(f"Combined {len(mp3_files)} MP3 segments into {output_path}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to combine MP3 segments: {e}")
+        return False
+
+
 def generate_tts_gemini(text, output_file, speaker_configs=None):
     """
     Generate TTS using Gemini gemini-2.5-flash-preview-tts.
@@ -405,6 +485,8 @@ def extract_text_with_docling(file_path):
 def index():
     return render_template('index.html')
 
+MAX_FILE_SIZE = 512 * 1024  # 0.5 MB = 512 KB
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     print("Upload route called")
@@ -420,13 +502,33 @@ def upload_file():
         print("No selected file")
         return jsonify({"error": "No selected file"}), 400
 
+    # Check file size (read into memory to measure, then reset)
+    file.seek(0, 2)  # Seek to end
+    file_size = file.tell()
+    file.seek(0)  # Reset to beginning
+    if file_size > MAX_FILE_SIZE:
+        size_mb = round(file_size / (1024 * 1024), 2)
+        print(f"File too large: {size_mb} MB (max 0.5 MB)")
+        return jsonify({"error": f"File is too large ({size_mb} MB). Maximum allowed size is 0.5 MB."}), 400
+
     try:
-        print(f"Processing file: {file.filename}")
+        original_filename = file.filename
+        print(f"Processing file: {original_filename}")
         file_id = str(uuid.uuid4())
-        filename = secure_filename(file.filename)
+
+        # Extract extension from ORIGINAL filename (before secure_filename strips non-ASCII)
+        original_ext = os.path.splitext(original_filename)[1].lower()  # e.g. '.docx'
+
+        # Use secure_filename but fall back to UUID if it strips everything
+        safe_name = secure_filename(file.filename)
+        if not safe_name or not os.path.splitext(safe_name)[1]:
+            # secure_filename stripped all chars (e.g. Arabic filename) — use UUID + original ext
+            safe_name = f"{file_id}{original_ext}"
+
+        filename = safe_name
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
-        print(f"Saving file to: {file_path}")
+        print(f"Saving file to: {file_path} (original: {original_filename})")
         file.save(file_path)
 
         if not os.path.exists(file_path):
@@ -536,7 +638,7 @@ def ask_question():
             extracted_path = os.path.join(app.config['EXTRACTED_FOLDER'], extracted_filename)
 
             if not os.path.exists(extracted_path):
-                return jsonify({"answer": f"File not found: {filename}. Please upload it first."}), 404
+                return jsonify({"error": f"File not found: {filename}. Please upload it first."}), 404
 
             with open(extracted_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -663,13 +765,15 @@ def generate_podcast():
                 display_script += f"### {speaker}:\n\n{text.strip()}\n\n"
 
             # ============================================
-            # Generate Audio: Gemini TTS → OpenRouter → gTTS
+            # Generate Audio per segment, then combine
+            # Gemini TTS → per-segment gTTS fallback
             # No ffmpeg required!
             # ============================================
             audio_generated = False
             audio_file_path = None
+            temp_dir = tempfile.mkdtemp(prefix="podcast_audio_")
 
-            # --- Try 1: Gemini TTS (multi-speaker, outputs WAV) ---
+            # --- Try 1: Gemini TTS (multi-speaker, whole script as one call) ---
             if gemini_tts_client and genai_new_available:
                 try:
                     tts_text = "TTS the following conversation:\n"
@@ -699,42 +803,67 @@ def generate_podcast():
                         speaker_configs=speaker_voice_configs
                     )
                     if audio_generated:
-                        audio_file_path = output_base_path + '.wav'
-                        print("✅ Podcast audio generated with Gemini TTS (multi-speaker)")
+                        # Verify the file has actual content
+                        wav_path = output_base_path + '.wav'
+                        if os.path.exists(wav_path) and os.path.getsize(wav_path) > 1000:
+                            audio_file_path = wav_path
+                            print("✅ Podcast audio generated with Gemini TTS (multi-speaker)")
+                        else:
+                            audio_generated = False
+                            logger.warning("Gemini TTS produced empty/tiny file, falling back")
                 except Exception as e:
                     logger.error(f"Gemini TTS attempt failed: {e}")
 
-            # --- Try 2: OpenRouter gpt-audio-mini (outputs WAV) ---
+            # --- Try 2: Per-segment gTTS (each segment → MP3, then combine) ---
             if not audio_generated:
                 try:
-                    print("Trying OpenRouter gpt-audio-mini for TTS...")
-                    full_text = "\n".join([f"{seg['speaker']}: {seg['text']}" for seg in script_segments])
-                    audio_generated = generate_tts_openrouter(
-                        full_text,
-                        output_base_path + '.wav',
-                        voice="alloy"
-                    )
-                    if audio_generated:
-                        audio_file_path = output_base_path + '.wav'
-                        print("✅ Podcast audio generated with OpenRouter gpt-audio-mini")
-                except Exception as e:
-                    logger.error(f"OpenRouter TTS attempt failed: {e}")
+                    print("Generating audio per-segment with gTTS...")
+                    lang_code = "en" if language.lower() == "english" else "ar" if language.lower() == "arabic" else "en"
+                    segment_files = []
 
-            # --- Try 3: gTTS fallback (outputs MP3 natively, no ffmpeg) ---
-            if not audio_generated:
-                try:
-                    print("Falling back to gTTS for audio generation...")
-                    full_text = "\n".join([f"{seg['speaker']}: {seg['text']}" for seg in script_segments])
-                    audio_generated = generate_tts_gtts(
-                        full_text,
-                        output_base_path + '.mp3',
-                        language=language
-                    )
-                    if audio_generated:
-                        audio_file_path = output_base_path + '.mp3'
-                        print("✅ Podcast audio generated with gTTS (fallback)")
+                    for i, seg in enumerate(script_segments):
+                        text = seg['text'].strip()
+                        if not text or len(text) < 3:
+                            continue
+
+                        seg_path = os.path.join(temp_dir, f"seg_{i:04d}.mp3")
+                        try:
+                            print(f"  Generating segment {i+1}/{len(script_segments)} ({len(text)} chars)...")
+                            tts = gTTS(text=text, lang=lang_code, slow=False)
+                            tts.save(seg_path)
+
+                            # Verify segment was created and has content
+                            if os.path.exists(seg_path) and os.path.getsize(seg_path) > 100:
+                                segment_files.append(seg_path)
+                                print(f"  ✅ Segment {i+1} saved ({os.path.getsize(seg_path)} bytes)")
+                            else:
+                                print(f"  ⚠️ Segment {i+1} too small, skipping")
+                        except Exception as seg_err:
+                            logger.warning(f"Failed to generate segment {i+1}: {seg_err}")
+                            continue
+
+                    # Combine all segments into one file
+                    if segment_files:
+                        final_mp3 = output_base_path + '.mp3'
+                        combine_success = combine_mp3_segments(segment_files, final_mp3)
+                        if combine_success and os.path.exists(final_mp3) and os.path.getsize(final_mp3) > 100:
+                            audio_generated = True
+                            audio_file_path = final_mp3
+                            print(f"✅ Combined {len(segment_files)} segments into {final_mp3} ({os.path.getsize(final_mp3)} bytes)")
+                        else:
+                            logger.error("Failed to combine MP3 segments")
+                    else:
+                        logger.error("No audio segments were successfully generated")
+
                 except Exception as e:
-                    logger.error(f"gTTS fallback attempt failed: {e}")
+                    logger.error(f"Per-segment gTTS attempt failed: {e}")
+
+            # Clean up temp files
+            try:
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
 
             error_message = None if audio_generated else "All TTS providers failed. Script was generated but no audio could be created."
 
