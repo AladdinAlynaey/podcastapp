@@ -5,8 +5,10 @@ docling==0.1.6
 faiss-cpu==1.7.4
 chromadb==0.4.6
 google-generativeai==0.3.0
+google-genai>=1.0.0
 python-dotenv==0.19.2
 langchain==0.0.267
 numpy==1.24.3
-pydub==0.25.1
-gtts==2.3.1 
+gtts==2.3.1
+openai>=1.0.0
+requests>=2.31.0
