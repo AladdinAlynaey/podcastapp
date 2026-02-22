@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alaadin's DocsPodcast</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><path fill='%233a86ff' d='M511.1 367.1c0 44.18-42.98 80-95.1 80s-95.1-35.82-95.1-79.1c0-44.18 42.98-79.1 95.1-79.1c11.28 0 21.95 1.92 32.01 4.898V148.1C447.1 148.8 416.5 128 384 128c-13.22 0-26.15 3.225-38.36 8.262C329.7 59.99 272.8 8 207.1 8 144.6 8 87.65 50.15 66.77 109.2C27.87 130.9 0 172.5 0 220c0 69.84 71.25 124 159.1 124 31.11 0 60.25-6.824 84.97-18.75c32.64 21.35 72.66 33.75 116 33.75c35.3 0 68.32-9.299 96.24-24.98C487.5 341.5 511.1 353.4 511.1 367.1zM159.1 300c-70.75 0-128-40.75-128-80S89.24 140 159.1 140c39.38 0 74.19 12.84 98.07 32.65C238.2 195.6 223.1 222.4 223.1 252c0 29.83 14.28 56.8 34.32 79.89C235.1 293.5 199.8 300 159.1 300z' /></svg>">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Icons and Libraries -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="app-logo" title="Alaadin's DocsPodcast - AI document assistant">
+                <i class="fas fa-podcast"></i>
+            </div>
+            <div class="app-title-container">
+                <h1 class="app-title">Alaadin's DocsPodcast</h1>
+                <div class="description-container">
+                    <div class="taglines">
+                        <p class="app-description">Turn any document into an AI-powered audio podcast</p>
+                        <p class="app-description">or chat with your documents using smart AI</p>
+                    </div>
+                    <span class="ai-badge">AI-powered</span>
+                </div>
+            </div>
+        </header>
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-upload"></i>
+                <span>Upload Document</span>
+            </div>
+            <div class="card-body">
+                <div id="upload-area" class="upload-area">
+                    <div class="upload-icon">
+                        <i class="fas fa-file-upload"></i>
+                    </div>
+                    <h4 class="upload-text">Drag & Drop your document here</h4>
+                    <p class="mb-3">or</p>
+                    <input type="file" id="file-input" class="hidden">
+                    <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+                        <i class="fas fa-folder-open"></i>
+                        <span>Browse Files</span>
+                    </button>
+                </div>
+                <div id="upload-progress" class="mt-3 hidden">
+                    <div class="audio-progress">
+                        <div class="audio-progress-bar" id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-file-alt"></i>
+                <span>Your Documents</span>
+            </div>
+            <div class="card-body">
+                <div id="file-list" class="file-list">
+                    <!-- Files will be listed here -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-robot"></i>
+                <span>Document AI Assistant</span>
+            </div>
+            <div class="card-body">
+                <div id="no-file-selected" class="text-center mt-3 mb-3">
+                    <i class="fas fa-hand-pointer" style="font-size: 2rem; color: var(--gray-400); margin-bottom: 1rem;"></i>
+                    <p>Please select a document to interact with it</p>
+                </div>
+                
+                <div id="file-actions" class="hidden">
+                    <div class="d-flex align-center justify-between mb-3">
+                        <h3 id="selected-file-name" class="mb-0"></h3>
+                    </div>
+                    
+                    <div class="tabs">
+                        <button class="tab active" data-tab="qa-tab">
+                            <i class="fas fa-question-circle"></i>
+                            <span>Q&A Chat</span>
+                        </button>
+                        <button class="tab" data-tab="podcast-tab">
+                            <i class="fas fa-microphone-alt"></i>
+                            <span>Podcast Generator</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Q&A Tab Content -->
+                    <div id="qa-tab" class="tab-content">
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle"></i>
+                            <div>Ask questions about your document. The AI will answer based <strong>only</strong> on the content of your document.</div>
+                        </div>
+                        
+                        <div id="chat-container" class="chat-container">
+                            <!-- Chat messages will appear here -->
+                        </div>
+                        
+                        <div class="chat-input-container">
+                            <input type="text" id="question-input" class="chat-input" placeholder="Ask a question about your document...">
+                            <button id="chat-submit" class="chat-submit">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Podcast Tab Content -->
+                    <div id="podcast-tab" class="tab-content hidden">
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle"></i>
+                            <div>Transform your document into a podcast-style conversation between multiple speakers.</div>
+                        </div>
+                        
+                        <div class="podcast-options">
+                            <div>
+                                <label class="option-label">Number of Speakers</label>
+                                <select id="num-speakers" class="option-select">
+                                    <option value="2">2 Speakers</option>
+                                    <option value="3">3 Speakers</option>
+                                    <option value="4">4 Speakers</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="option-label">Language</label>
+                                <select id="language" class="option-select">
+                                    <option value="English">English</option>
+                                    <option value="Arabic">Arabic</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <button id="generate-podcast-btn" class="btn btn-primary mb-4">
+                            <i class="fas fa-magic"></i>
+                            <span>Generate Podcast</span>
+                        </button>
+                        
+                        <div id="podcast-result" class="hidden">
+                            <!-- Script Container -->
+                            <div class="script-container">
+                                <div class="script-header">
+                                    <h4 class="script-title">
+                                        <i class="fas fa-align-left"></i>
+                                        <span>Podcast Script</span>
+                                    </h4>
+                                    <button id="script-toggle" class="script-toggle">
+                                        <i class="fas fa-chevron-down"></i>
+                                    </button>
+                                </div>
+                                <div id="script-content" class="script-content" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease-in-out;">
+                                    <div id="podcast-script"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Audio Container -->
+                            <div class="audio-container">
+                                <h4 class="audio-title">
+                                    <i class="fas fa-headphones"></i>
+                                    <span>Podcast Audio</span>
+                                </h4>
+                                
+                                <audio id="podcast-audio" class="audio-player" controls></audio>
+                                
+                                <div class="audio-progress">
+                                    <div class="audio-progress-bar"></div>
+                                </div>
+                                
+                                <div class="audio-time">
+                                    <span class="time-current">0:00</span>
+                                    <span class="time-total">0:00</span>
+                                </div>
+                                
+                                <div class="audio-buttons">
+                                    <button id="download-audio-btn" class="btn btn-success">
+                                        <i class="fas fa-download"></i>
+                                        <span>Download Podcast</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="app-footer mt-4">
+            <p>&copy; 2025 Alaadin's DocsPodcast - Turn any document into an AI-powered podcast or chat with your documents using smart Q&A</p>
+        </footer>
+    </div>
+    
+    <!-- JavaScript -->
+    <script src="/static/js/main.js"></script>
+</body>
+</html> 
