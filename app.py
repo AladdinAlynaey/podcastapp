@@ -487,6 +487,14 @@ def index():
 
 MAX_FILE_SIZE = 512 * 1024  # 0.5 MB = 512 KB
 
+@app.route('/download-app')
+def download_app():
+    """Serve the Android APK for download."""
+    apk_path = os.path.join(app.static_folder, 'DocsPodcast.apk')
+    if os.path.exists(apk_path):
+        return send_file(apk_path, as_attachment=True, download_name='DocsPodcast.apk')
+    return jsonify({"error": "APK file not found"}), 404
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     print("Upload route called")

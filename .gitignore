@@ -33,3 +33,28 @@ chroma_data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+.DS_Store
+*.log
+
+# Android
+*.apk
+*.aab
+!static/DocsPodcast.apk
+.gradle/
+
+# iOS
+.build/
+Pods/
+
+# Web
+build/web/
+
+# The Flutter app source
+docspodcast_app/
